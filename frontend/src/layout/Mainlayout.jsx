@@ -1,11 +1,18 @@
-import React from 'react'
+import Navbar from "../components/Navbar";
+import { Outlet } from "react-router-dom";
 
-const Mainlayout = () => {
+const MainLayout = () => {
   return (
-    <div>
-      
-    </div>
-  )
-}
+    <div className="flex flex-col min-h-screen">
+      {/* Navbar */}
+      <Navbar />
 
-export default Mainlayout
+      {/* Main content */}
+      <main className="flex-1 flex items-center justify-center bg-base-100 overflow-hidden">
+        <Outlet /> {/* Pages will always be centered */}
+      </main>
+    </div>
+  );
+};
+
+export default MainLayout;
