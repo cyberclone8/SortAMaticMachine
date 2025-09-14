@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import React from 'react'
 import Navbar from '../components/Navbar'
 import MenuItems from '../components/MenuItems'
@@ -29,5 +30,23 @@ const Mainlayout = ({children}) => {
     </div>
   )
 }
+=======
+import Navbar from "../components/Navbar";
+import { Outlet } from "react-router-dom";
 
-export default Mainlayout
+const MainLayout = () => {
+  return (
+    <div className="flex flex-col min-h-screen">
+      {/* Navbar */}
+      <Navbar />
+>>>>>>> 07056660920abd5b1e05ab10c2d225697d0307bb
+
+      {/* Main content */}
+      <main className="flex-1 flex items-center justify-center bg-base-100 overflow-hidden">
+        <Outlet /> {/* Pages will always be centered */}
+      </main>
+    </div>
+  );
+};
+
+export default MainLayout;
