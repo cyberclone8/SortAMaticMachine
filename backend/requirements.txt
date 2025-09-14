@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+opencv-python
+numpy
+ultralytics
+websockets
+RPi.GPIO
+adafruit-circuitpython-pca9685
+HX711
