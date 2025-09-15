@@ -95,15 +95,39 @@ def mjpeg_generator():
 
 @app.get('/camera/mjpeg')
 def camera_mjpeg():
-    return StreamingResponse(mjpeg_generator(), media_type='multipart/x-mixed-replace; boundary=frame')
+    return StreamingResponse(mjpeg_generator(), media_type='multipart/x-mixed-replace; boundary=frame',  headers={
+            "Access-Control-Allow-Origin": "*",  # allow frontend to use the feed in canvas
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Methods": "*",
+        })
 
 @app.websocket('/ws/inference')
 async def ws_inference(ws: WebSocket):
     await ws.accept()
     cap = cv2.VideoCapture(CAM_INDEX)
+    paused = False  # backend pause flag
+
+    async def receive_commands():
+        nonlocal paused
+        try:
+            while True:
+                msg = await ws.receive_text()
+                if msg.lower() == "pause":
+                    paused = True
+                elif msg.lower() == "resume":
+                    paused = False
+        except Exception:
+            pass  # ignore if connection closed
+
+    # Run command receiver in background
+    command_task = asyncio.create_task(receive_commands())
 
     try:
         while True:
+            if paused:
+                await asyncio.sleep(0.1)  # skip processing while paused
+                continue
+
             ret, frame = cap.read()
             if not ret:
                 await ws.send_json({'error': 'camera_read_failed'})
@@ -133,6 +157,7 @@ async def ws_inference(ws: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
+        command_task.cancel()  # stop receiving commands
         cap.release()
 
 @app.get('/loadcells/weights')
