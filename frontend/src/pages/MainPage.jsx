@@ -3,6 +3,7 @@ import CameraFrame from '../components/CameraFrame'
 import { Camera, ClipboardClock } from 'lucide-react';
 import SegreationLogs from '../components/SegreationLogs';
 import BinStatus from '../components/BinStatus';
+import Logo from '../assets/Logo.jpg'
 
 const MainPage = () => {
   return (
@@ -57,13 +58,26 @@ const MainPage = () => {
             <ClipboardClock />
             <span>Logo / Info</span>
           </div>
+
           {/* Content */}
-          <div className="flex-1 p-4 flex items-center justify-center">
+          <div className="flex-1 flex items-center justify-center flex-col text-center px-4">
             {/* Put logo or other info here */}
-            <p>Logo goes here</p>
+            <img
+              src={Logo}
+              alt="Logo"
+              className="w-20 h-20 md:w-32 md:h-32 rounded-full shadow-sm animate-spin-slow logo-flip"
+            />
+            <h1 className=" text-lg font-bold text-gray-800">
+              Sort-A-Matic Machine
+            </h1>
+            <p className=" text-gray-600 text-sm max-w-full ">
+              An intelligent segregation system powered by real-time object detection
+              and automation. Built for efficiency, accuracy, and innovation.
+            </p>
           </div>
         </div>
       </div>
+
     </div>
   )
 }

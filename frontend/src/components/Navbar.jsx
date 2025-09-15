@@ -1,6 +1,7 @@
 import React from 'react'
 import { Menu } from 'lucide-react'
 import Sidebar from './Sidebar'
+import Logo from '../assets/Logo.jpg'
 
 const Navbar = () => {
     return (
@@ -26,7 +27,7 @@ const Navbar = () => {
                         {/* Right side (Logo) */}
                         <div className="navbar-end">
                             <img
-                                src="/logo.png"
+                                src={Logo}
                                 alt="Logo"
                                 className="w-8 h-8 md:w-10 md:h-10  rounded-full"
                             />
