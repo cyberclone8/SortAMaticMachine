@@ -3,13 +3,13 @@ import { Outlet } from "react-router-dom";
 
 const MainLayout = () => {
   return (
-    <div className="flex flex-col min-h-screen">
-      {/* Navbar */}
+    <div className="flex flex-col h-screen">
+      {/* Navbar fixed height */}
       <Navbar />
 
-      {/* Main content */}
-      <main className="flex-1 flex items-center justify-center bg-base-100 overflow-hidden">
-        <Outlet /> {/* Pages will always be centered */}
+      {/* Main content scrollable */}
+      <main className="flex-1 overflow-y-auto bg-base-100">
+        <Outlet />
       </main>
     </div>
   );

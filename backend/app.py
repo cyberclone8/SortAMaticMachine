@@ -1,14 +1,33 @@
 import cv2, time, asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 
-from helpers.pca9685_servo import PCA9685ServoController
+# from helpers.pca9685_servo import PCA9685ServoController
+from config import get_servo_gpio_config
+from helpers.servo_pigpio import GPIOServoController
 from helpers.l298n_motor import L298NConveyor
 from helpers.loadcells import MultiLoadCell
 from utils.inference import detect_objects
 from utils.class_mapping import classify_detection, CATEGORY_COLORS, CLASS_TO_CATEGORY
 
 app = FastAPI()
+
+# ✅ Allow requests from your frontend
+origins = [
+    "http://localhost:5173",  # React dev server
+    # "http://your-frontend-domain.com",  # Production domain
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,   # can also use ["*"] to allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],     # allow all HTTP methods
+    allow_headers=["*"],     # allow all headers
+)
+
+
 
 # Configuration
 SERVO_CHANNEL_MAP = {
@@ -35,7 +54,9 @@ SERVO_MOVE_TIME = {
     'spare': 0.3,
 }
 
-servo_ctrl = PCA9685ServoController()
+# servo_ctrl = PCA9685ServoController()
+servo_cfg = get_servo_gpio_config()
+servo_ctrl = GPIOServoController(servo_cfg)
 conveyor = L298NConveyor(en_pin=18, in1_pin=23, in2_pin=24)
 
 loadcells = MultiLoadCell([
@@ -93,14 +114,12 @@ async def ws_inference(ws: WebSocket):
                     conf = det['confidence']
                     category = classify_detection(cls)
                     await ws.send_json({'detected_class': cls, 'confidence': conf, 'category': category})
-                    # actuate
                     dur = SERVO_MOVE_TIME.get(category, 0.5)
-                    servo_ch = SERVO_CHANNEL_MAP.get(category, 0)
                     micros = SERVO_MOVE_US.get(category, 1500)
                     conveyor.set_speed(60.0)
                     time.sleep(dur)
                     conveyor.stop()
-                    servo_ctrl.move_servo(servo_ch, microseconds=micros)
+                    servo_ctrl.move_servo(category, microseconds=micros)
             else:
                 await ws.send_json({'labels': []})
             await asyncio.sleep(0.2)
@@ -123,10 +142,30 @@ def conveyor_stop():
     conveyor.stop()
     return JSONResponse({'status': 'stopped'})
 
+@app.post('/conveyor/start')
+def conveyor_start(speed: float = 50.0):
+    """
+    Start the conveyor at a default or given speed (percentage 0-100).
+    """
+    conveyor.set_speed(speed)
+    return JSONResponse({'status': 'started', 'speed': speed})
+
 @app.post('/servo/move')
-def move_servo(channel: int, angle: float = None, microseconds: int = None):
-    servo_ctrl.move_servo(channel, angle=angle, microseconds=microseconds)
-    return JSONResponse({'status': 'moved', 'channel': channel})
+def move_servo(category: str, angle: float = None, microseconds: int = None):
+    servo_ctrl.move_servo(category, angle=angle, microseconds=microseconds)
+    return JSONResponse({'status': 'moved', 'category': category})
+
+@app.post("/segregate")
+def segregate(data: dict):
+    if "category" in data and "detected_class" in data:
+        return JSONResponse({
+            "status": "completed",
+            "classification": data["category"],
+            "object": data["detected_class"]
+        })
+    return JSONResponse({"status": "failed", "reason": "Missing fields"}, status_code=400)
+    
+
 
 if __name__ == '__main__':
     import uvicorn

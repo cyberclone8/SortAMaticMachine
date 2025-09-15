@@ -1,27 +1,3 @@
-// utils/createSocket.js
-export function createSocket(url) {
-  const ws = new WebSocket(url);
-
-  ws.onopen = () => {
-    console.log(`✅ WebSocket connected to ${url}`);
-  };
-
-  ws.onmessage = (event) => {
-    console.log(`📩 Message from ${url}:`, event.data);
-  };
-
-  ws.onerror = (error) => {
-    console.error(`❌ WebSocket error on ${url}:`, error);
-  };
-
-  ws.onclose = (event) => {
-    console.log(`🔌 WebSocket closed from ${url}`, event);
-  };
-
-  return ws;
-}
-
-// utils/sendDetection.js
 export async function sendDetection(detection) {
   try {
     const response = await fetch("http://localhost:8000/segregate", {

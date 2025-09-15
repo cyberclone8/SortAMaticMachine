@@ -29,7 +29,7 @@ const BinStatus = () => {
   return (
     <div className="grid grid-cols-4 gap-4 w-full h-full">
       <div className="flex flex-col items-center">
-        <div className="mb-2 font-semibold text-gray-800">Bin 1</div>
+        <div className="mb-2 font-semibold text-gray-800">Biodegradable</div>
         <div className="relative flex flex-col items-center justify-end w-full h-full bg-gray-200 rounded-b-xl overflow-hidden">
           {/* Bin Lid */}
           <div className="absolute -top-2 w-full h-4 bg-gray-400 rounded-t-lg shadow-sm"></div>
@@ -50,7 +50,7 @@ const BinStatus = () => {
 
       {/* Bin 2 */}
       <div className="flex flex-col items-center">
-        <div className="mb-2 font-semibold text-gray-800">Bin 2</div>
+        <div className="mb-2 font-semibold text-gray-800">Non-biodegradable</div>
         <div className="relative flex flex-col items-center justify-end w-full h-full bg-gray-200 rounded-b-xl overflow-hidden">
           <div className="absolute -top-2 w-full h-4 bg-gray-400 rounded-t-lg shadow-sm"></div>
           <div
@@ -70,7 +70,7 @@ const BinStatus = () => {
 
       {/* Bin 3 */}
       <div className="flex flex-col items-center">
-        <div className="mb-2 font-semibold text-gray-800">Bin 3</div>
+        <div className="mb-2 font-semibold text-gray-800">Recyclable</div>
         <div className="relative flex flex-col items-center justify-end w-full h-full bg-gray-200 rounded-b-xl overflow-hidden">
           <div className="absolute -top-2 w-full h-4 bg-gray-400 rounded-t-lg shadow-sm"></div>
           <div
@@ -90,7 +90,7 @@ const BinStatus = () => {
 
       {/* Bin 4 */}
       <div className="flex flex-col items-center">
-        <div className="mb-2 font-semibold text-gray-800">Bin 4</div>
+        <div className="mb-2 font-semibold text-gray-800">Paper</div>
         <div className="relative flex flex-col items-center justify-end w-full h-full bg-gray-200 rounded-b-xl overflow-hidden">
           <div className="absolute -top-2 w-full h-4 bg-gray-400 rounded-t-lg shadow-sm"></div>
           <div

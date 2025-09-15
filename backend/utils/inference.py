@@ -23,8 +23,8 @@ def detect_objects(frame):
         # Simulation: return empty list (or you can simulate a fake detection)
         return []
     # ultralytics supports passing numpy array directly
-    results = model.predict(source=frame, conf=0.1, verbose=False)
-    results = model(frame, conf=0.1, verbose=False)
+    results = model.predict(source=frame, conf=0.5, verbose=False)
+    # results = model(frame, conf=0.1, verbose=False)
     detections = []
     for r in results:
         # r.boxes is tensor-like; iterate

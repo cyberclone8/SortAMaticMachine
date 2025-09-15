@@ -1,67 +1,72 @@
 import React, { useEffect, useState, useRef } from "react";
-import  {createSocket } from "../utils/createSocket";
+import { sendDetection } from "../utils/sendDetection";
 
-const SegregationLogs = () => {
+const SegregationLogs = ({ detection }) => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef(null);
 
-  const dummyActions = [
-    { action: "Scanning Item...", category: null },
-    { action: "Identified Item", category: "Metal - Can" },
-    { action: "Segregating into Bin", category: "Metal Bin" },
-    { action: "Success! Item Segregated", category: "Completed" },
-  ];
-
-  const socket = new WebSocket("ws://localhost:8080");
-
   useEffect(() => {
-    let step = 0;
-    socket.onopen = () => {
+    if (!detection) return;
+
+    const processDetection = async () => {
       setLoading(true);
-    }
 
-    socket.onmessage = (event) => {
+      const scanningLog = {
+        id: Date.now(),
+        action: "Scanning Item...",
+        category: null,
+        time: new Date().toISOString(),
+        type: "info", // use type to control color
+      };
+
+      setLogs((prev) => [...prev, scanningLog].slice(-15));
+
       try {
-        const data = JSON.parse(event.data);
-        /**
-         * Example messages from server:
-         * { action: "Scanning Item...", category: null }
-         * { action: "Identified Item", category: "Metal - Can" }
-         * { action: "Segregating into Bin", category: "Metal Bin" }
-         * { action: "Success! Item Segregated", category: "Completed" }
-         */
+        const result = await sendDetection(detection); // { status, classification, object }
 
-        const newLog = {
+        const newLogs = [
+          {
+            id: Date.now() + 1,
+            action: "Identified Item",
+            category: result.object,
+            time: new Date().toISOString(),
+            type: "info",
+          },
+          {
+            id: Date.now() + 2,
+            action: "Segregating into Bin",
+            category: `${result.classification} Bin`,
+            time: new Date().toISOString(),
+            type: "info",
+          },
+          {
+            id: Date.now() + 3,
+            action: "Success! Item Segregated",
+            category: "Completed",
+            time: new Date().toISOString(),
+            type: "success", // completed log
+          },
+        ];
+
+        setLogs((prev) => [...prev, ...newLogs].slice(-15));
+      } catch (err) {
+        console.error("Error sending detection:", err);
+        const errorLog = {
           id: Date.now(),
-          ...data,
+          action: "Error processing detection",
+          category: "Failed",
           time: new Date().toISOString(),
+          type: "error",
         };
-
-        // If new scanning starts → reset logs
-        if (data.action === "Scanning Item...") {
-          setLogs([newLog]);
-        } else {
-          setLogs((prev) => [...prev, newLog]);
-        }
-
-        // If completed → stop loader
-        if (data.category === "Completed") {
-          setLoading(false);
-        } else {
-          setLoading(true);
-        }
-      } catch (error) {
-        console.error("Error parsing WebSocket message:", err);
-      }
-
-      socket.onclose = () => {
+        setLogs((prev) => [...prev, errorLog].slice(-15));
+      } finally {
         setLoading(false);
       }
-    }
+    };
 
-    return () => socket.close();
-  }, []);
+    processDetection();
+  }, [detection]);
 
   // Auto scroll to bottom
   useEffect(() => {
@@ -71,14 +76,23 @@ const SegregationLogs = () => {
     });
   }, [logs]);
 
+  const getCategoryColor = (type) => {
+    switch (type) {
+      case "success":
+        return "text-green-600";
+      case "error":
+        return "text-red-600";
+      default:
+        return "text-gray-800";
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
-      {/* Scrollable logs */}
-      <div
-        ref={scrollRef}
-        className="flex-1 p-4 space-y-3 overflow-y-auto"
-      >
-        {logs.length === 0 && <p className="text-gray-500 text-center">No logs yet...</p>}
+      <div ref={scrollRef} className="flex-1 p-4 space-y-3 overflow-y-auto">
+        {logs.length === 0 && (
+          <p className="text-gray-500 text-center">No logs yet...</p>
+        )}
 
         {logs.map((log) => (
           <div
@@ -86,7 +100,9 @@ const SegregationLogs = () => {
             className="p-3 rounded-lg border flex justify-between items-center bg-gray-50"
           >
             <div>
-              <p className="font-medium">{log.category || "Processing..."}</p>
+              <p className={`font-medium ${getCategoryColor(log.type)}`}>
+                {log.category || "Processing..."}
+              </p>
               <p className="text-sm text-gray-500">{log.action}</p>
             </div>
             <span className="text-xs text-gray-400">
