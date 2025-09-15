@@ -32,7 +32,7 @@ const MainPage = () => {
       </div>
 
       {/* Bin Status */}
-      <div className="bg-white col-span-2 flex flex-col rounded-lg h-[280px]">
+      <div className="bg-white col-span-2 flex flex-col shadow-sm rounded-lg h-[280px]">
         <div className="w-full h-full flex flex-col">
           {/* Header */}
           <div className="flex gap-2 p-2 h-12 items-center">

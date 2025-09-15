@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import  {createSocket } from "../utils/createSocket";
 
 const SegregationLogs = () => {
   const [logs, setLogs] = useState([]);
@@ -10,34 +11,56 @@ const SegregationLogs = () => {
     { action: "Identified Item", category: "Metal - Can" },
     { action: "Segregating into Bin", category: "Metal Bin" },
     { action: "Success! Item Segregated", category: "Completed" },
-    { action: "Success! Item Segregated", category: "Completed" },
-    { action: "Success! Item Segregated", category: "Completed" },
-    { action: "Success! Item Segregated", category: "Completed" },
-    { action: "Success! Item Segregated", category: "Completed" },
-    { action: "Success! Item Segregated", category: "Completed" },
-    { action: "Success! Item Segregated", category: "Completed" },
   ];
+
+  const socket = new WebSocket("ws://localhost:8080");
 
   useEffect(() => {
     let step = 0;
-    setLoading(true);
+    socket.onopen = () => {
+      setLoading(true);
+    }
 
-    const interval = setInterval(() => {
-      if (step < dummyActions.length) {
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        /**
+         * Example messages from server:
+         * { action: "Scanning Item...", category: null }
+         * { action: "Identified Item", category: "Metal - Can" }
+         * { action: "Segregating into Bin", category: "Metal Bin" }
+         * { action: "Success! Item Segregated", category: "Completed" }
+         */
+
         const newLog = {
-          id: Date.now() + step,
-          ...dummyActions[step],
+          id: Date.now(),
+          ...data,
           time: new Date().toISOString(),
         };
-        setLogs((prev) => [...prev, newLog]);
-        step++;
-        if (step === dummyActions.length) setLoading(false);
-      } else {
-        clearInterval(interval);
-      }
-    }, 1000);
 
-    return () => clearInterval(interval);
+        // If new scanning starts → reset logs
+        if (data.action === "Scanning Item...") {
+          setLogs([newLog]);
+        } else {
+          setLogs((prev) => [...prev, newLog]);
+        }
+
+        // If completed → stop loader
+        if (data.category === "Completed") {
+          setLoading(false);
+        } else {
+          setLoading(true);
+        }
+      } catch (error) {
+        console.error("Error parsing WebSocket message:", err);
+      }
+
+      socket.onclose = () => {
+        setLoading(false);
+      }
+    }
+
+    return () => socket.close();
   }, []);
 
   // Auto scroll to bottom
