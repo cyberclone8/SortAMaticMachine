@@ -101,28 +101,35 @@ def camera_mjpeg():
 async def ws_inference(ws: WebSocket):
     await ws.accept()
     cap = cv2.VideoCapture(CAM_INDEX)
+
     try:
         while True:
             ret, frame = cap.read()
             if not ret:
                 await ws.send_json({'error': 'camera_read_failed'})
                 break
+
             detections = detect_objects(frame)
             if detections:
+                results = []
                 for det in detections:
                     cls = det['class']
                     conf = det['confidence']
                     category = classify_detection(cls)
-                    await ws.send_json({'detected_class': cls, 'confidence': conf, 'category': category})
-                    dur = SERVO_MOVE_TIME.get(category, 0.5)
-                    micros = SERVO_MOVE_US.get(category, 1500)
-                    conveyor.set_speed(60.0)
-                    time.sleep(dur)
-                    conveyor.stop()
-                    servo_ctrl.move_servo(category, microseconds=micros)
+
+                    results.append({
+                        'detected_class': cls,
+                        'confidence': conf,
+                        'category': category
+                    })
+
+                # Send all detections for this frame
+                await ws.send_json({'detections': results})
             else:
-                await ws.send_json({'labels': []})
+                await ws.send_json({'detections': []})
+
             await asyncio.sleep(0.2)
+
     except WebSocketDisconnect:
         pass
     finally:
@@ -158,12 +165,33 @@ def move_servo(category: str, angle: float = None, microseconds: int = None):
 @app.post("/segregate")
 def segregate(data: dict):
     if "category" in data and "detected_class" in data:
+        category = data["category"]
+        detected_class = data["detected_class"]
+
+        # Conveyor + servo timing from tables
+        dur = SERVO_MOVE_TIME.get(category, 0.5)
+        micros = SERVO_MOVE_US.get(category, 1500)
+
+        # Step 1: Move conveyor
+        conveyor.set_speed(60.0)
+        time.sleep(dur)
+        conveyor.stop()
+
+        # Step 2: Move corresponding servo
+        servo_ctrl.move_servo(category, microseconds=micros)
+        time.sleep(0.5)  # let servo actuate
+        servo_ctrl.move_servo(category, microseconds=1500)  # back to neutral
+
         return JSONResponse({
             "status": "completed",
-            "classification": data["category"],
-            "object": data["detected_class"]
+            "classification": category,
+            "object": detected_class
         })
-    return JSONResponse({"status": "failed", "reason": "Missing fields"}, status_code=400)
+
+    return JSONResponse(
+        {"status": "failed", "reason": "Missing fields"},
+        status_code=400
+    )
     
 
 
