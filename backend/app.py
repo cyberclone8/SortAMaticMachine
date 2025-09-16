@@ -57,13 +57,13 @@ SERVO_MOVE_TIME = {
 # servo_ctrl = PCA9685ServoController()
 servo_cfg = get_servo_gpio_config()
 servo_ctrl = GPIOServoController(servo_cfg)
-conveyor = L298NConveyor(en_pin=18, in1_pin=23, in2_pin=24)
+conveyor = L298NConveyor(en_pin=25, in1_pin=24, in2_pin=23)
 
 loadcells = MultiLoadCell([
-    {'name': 'loadcell1', 'dout_pin': 5, 'pd_sck_pin': 6},
-    {'name': 'loadcell2', 'dout_pin': 13, 'pd_sck_pin': 6},
-    {'name': 'loadcell3', 'dout_pin': 19, 'pd_sck_pin': 6},
-    {'name': 'loadcell4', 'dout_pin': 26, 'pd_sck_pin': 6},
+    {'name': 'loadcell1', 'dout_pin': 16, 'pd_sck_pin': 17},
+    {'name': 'loadcell2', 'dout_pin': 20, 'pd_sck_pin': 21},
+    {'name': 'loadcell3', 'dout_pin': 6, 'pd_sck_pin': 27},
+    {'name': 'loadcell4', 'dout_pin': 4, 'pd_sck_pin': 26},
 ])
 
 CAM_INDEX = 0
