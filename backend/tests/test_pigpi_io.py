@@ -5,8 +5,8 @@ import time
 SERVO_PINS = [12, 13, 18, 19]
 
 # Pulse width range (adjust if your servos need different min/max)
-MIN_PW = 500   # 0 degrees
-MAX_PW = 2500  # 180 degrees
+MIN_PW = 1000   # 0 degrees
+MAX_PW = 2000  # 180 degrees
 MID_PW = 1500  # ~90 degrees
 
 def test_servos():
