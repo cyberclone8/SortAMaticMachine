@@ -1,49 +1,37 @@
-import cv2, time, asyncio
+import cv2
+import time
+import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 
-# from helpers.pca9685_servo import PCA9685ServoController
-from config import get_servo_gpio_config
-from helpers.servo_pigpio import GPIOServoController
-from helpers.l298n_motor import L298NConveyor
-from helpers.loadcells import MultiLoadCell
+# === Import your hardware control modules ===
+from helpers.conveyor import MotorController  # from your L298N module
+from helpers.servo import PCA9685Controller   # from your PCA9685 module
 from utils.inference import detect_objects
 from utils.class_mapping import classify_detection, CATEGORY_COLORS, CLASS_TO_CATEGORY
 
+# === Initialize FastAPI ===
 app = FastAPI()
 
-# ✅ Allow requests from your frontend
-origins = [
-    "http://localhost:5173",  # React dev server
-    # "http://your-frontend-domain.com",  # Production domain
-]
+# Allow your frontend to connect
+origins = ["http://localhost:5173"]  # Add your production domain here if needed
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,   # can also use ["*"] to allow all origins
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],     # allow all HTTP methods
-    allow_headers=["*"],     # allow all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-
-
-# Configuration
+# === Configuration ===
 SERVO_CHANNEL_MAP = {
     'biodegradable': 0,
     'non_biodegradable': 1,
     'recyclable': 2,
     'paper': 3,
     'spare': 4,
-}
-
-SERVO_MOVE_US = {
-    'biodegradable': 1200,
-    'non_biodegradable': 1800,
-    'recyclable': 1400,
-    'paper': 1600,
-    'spare': 1500,
 }
 
 SERVO_MOVE_TIME = {
@@ -54,20 +42,13 @@ SERVO_MOVE_TIME = {
     'spare': 0.3,
 }
 
-# servo_ctrl = PCA9685ServoController()
-servo_cfg = get_servo_gpio_config()
-servo_ctrl = GPIOServoController(servo_cfg)
-conveyor = L298NConveyor(en_pin=25, in1_pin=24, in2_pin=23)
+# === Initialize hardware controllers ===
+servo_ctrl = PCA9685Controller()  # Uses I2C bus 3, addr 0x40 by default
+conveyor = MotorController(en_pin=25, in1_pin=24, in2_pin=23)
 
-loadcells = MultiLoadCell([
-    {'name': 'loadcell1', 'dout_pin': 16, 'pd_sck_pin': 17},
-    {'name': 'loadcell2', 'dout_pin': 20, 'pd_sck_pin': 21},
-    {'name': 'loadcell3', 'dout_pin': 6, 'pd_sck_pin': 27},
-    {'name': 'loadcell4', 'dout_pin': 4, 'pd_sck_pin': 26},
-])
+CAM_INDEX = 0  # Camera device index
 
-CAM_INDEX = 0
-
+# === MJPEG Camera Stream ===
 def mjpeg_generator():
     cap = cv2.VideoCapture(CAM_INDEX)
     try:
@@ -75,37 +56,55 @@ def mjpeg_generator():
             ret, frame = cap.read()
             if not ret:
                 break
+
             detections = detect_objects(frame)
-            for i, det in enumerate(detections):
+            for det in detections:
                 x1, y1, x2, y2 = det['bbox']
                 cls = det['class']
                 conf = det['confidence']
                 category = classify_detection(cls)
-                color = CATEGORY_COLORS.get(category, (255,255,255))
-                # draw box and label
-                cv2.rectangle(frame, (x1,y1), (x2,y2), color, 2)
-                cv2.putText(frame, f"{cls} ({category}) {conf:.2f}", (x1, max(10,y1-10)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                color = CATEGORY_COLORS.get(category, (255, 255, 255))
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                cv2.putText(
+                    frame,
+                    f"{cls} ({category}) {conf:.2f}",
+                    (x1, max(10, y1 - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    color,
+                    2,
+                )
+
             _, jpeg = cv2.imencode('.jpg', frame)
             frame_bytes = jpeg.tobytes()
-            yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            yield (
+                b'--frame\r\n'
+                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n'
+            )
             time.sleep(0.03)
     finally:
         cap.release()
 
+
 @app.get('/camera/mjpeg')
 def camera_mjpeg():
-    return StreamingResponse(mjpeg_generator(), media_type='multipart/x-mixed-replace; boundary=frame',  headers={
-            "Access-Control-Allow-Origin": "*",  # allow frontend to use the feed in canvas
+    return StreamingResponse(
+        mjpeg_generator(),
+        media_type='multipart/x-mixed-replace; boundary=frame',
+        headers={
+            "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Headers": "*",
             "Access-Control-Allow-Methods": "*",
-        })
+        },
+    )
 
+
+# === WebSocket Endpoint for Realtime Inference ===
 @app.websocket('/ws/inference')
 async def ws_inference(ws: WebSocket):
     await ws.accept()
     cap = cv2.VideoCapture(CAM_INDEX)
-    paused = False  # backend pause flag
+    paused = False
 
     async def receive_commands():
         nonlocal paused
@@ -117,15 +116,14 @@ async def ws_inference(ws: WebSocket):
                 elif msg.lower() == "resume":
                     paused = False
         except Exception:
-            pass  # ignore if connection closed
+            pass  # WebSocket closed
 
-    # Run command receiver in background
     command_task = asyncio.create_task(receive_commands())
 
     try:
         while True:
             if paused:
-                await asyncio.sleep(0.1)  # skip processing while paused
+                await asyncio.sleep(0.1)
                 continue
 
             ret, frame = cap.read()
@@ -140,72 +138,83 @@ async def ws_inference(ws: WebSocket):
                     cls = det['class']
                     conf = det['confidence']
                     category = classify_detection(cls)
-
                     results.append({
                         'detected_class': cls,
                         'confidence': conf,
                         'category': category
                     })
-
-                # Send all detections for this frame
                 await ws.send_json({'detections': results})
             else:
                 await ws.send_json({'detections': []})
 
             await asyncio.sleep(0.2)
-
     except WebSocketDisconnect:
         pass
     finally:
-        command_task.cancel()  # stop receiving commands
+        command_task.cancel()
         cap.release()
 
-@app.get('/loadcells/weights')
-def get_all_weights():
-    return JSONResponse(loadcells.get_all_weights())
 
+# === Conveyor Control Endpoints ===
 @app.post('/conveyor/set_speed')
 def conveyor_set_speed(speed: float):
     conveyor.set_speed(speed)
     return JSONResponse({'status': 'ok', 'speed': speed})
+
+
+@app.post('/conveyor/start')
+def conveyor_start(speed: float = 50.0):
+    conveyor.set_speed(speed)
+    return JSONResponse({'status': 'started', 'speed': speed})
+
 
 @app.post('/conveyor/stop')
 def conveyor_stop():
     conveyor.stop()
     return JSONResponse({'status': 'stopped'})
 
-@app.post('/conveyor/start')
-def conveyor_start(speed: float = 50.0):
-    """
-    Start the conveyor at a default or given speed (percentage 0-100).
-    """
-    conveyor.set_speed(speed)
-    return JSONResponse({'status': 'started', 'speed': speed})
 
+# === Servo Control Endpoints ===
 @app.post('/servo/move')
-def move_servo(category: str, angle: float = None, microseconds: int = None):
-    servo_ctrl.move_servo(category, angle=angle, microseconds=microseconds)
-    return JSONResponse({'status': 'moved', 'category': category})
+def move_servo(category: str, angle: float = None):
+    """
+    Move a servo based on category mapping and desired angle (0–180).
+    """
+    if category not in SERVO_CHANNEL_MAP:
+        return JSONResponse({'error': 'invalid category'}, status_code=400)
 
+    channel = SERVO_CHANNEL_MAP[category]
+
+    if angle is not None:
+        servo_ctrl.move_servo(channel, angle)
+    else:
+        # default center
+        servo_ctrl.move_to_90(channel)
+
+    return JSONResponse({'status': 'moved', 'category': category, 'angle': angle})
+
+
+# === Segregation Endpoint ===
 @app.post("/segregate")
 def segregate(data: dict):
+    """
+    Automatically control conveyor and servo based on classification result.
+    """
     if "category" in data and "detected_class" in data:
         category = data["category"]
         detected_class = data["detected_class"]
 
-        # Conveyor + servo timing from tables
-        dur = SERVO_MOVE_TIME.get(category, 0.5)
-        micros = SERVO_MOVE_US.get(category, 1500)
-
         # Step 1: Move conveyor
+        dur = SERVO_MOVE_TIME.get(category, 0.5)
         conveyor.set_speed(60.0)
         time.sleep(dur)
         conveyor.stop()
 
-        # Step 2: Move corresponding servo
-        servo_ctrl.move_servo(category, microseconds=micros)
-        time.sleep(0.5)  # let servo actuate
-        servo_ctrl.move_servo(category, microseconds=1500)  # back to neutral
+        # Step 2: Move corresponding servo to 90° then back
+        channel = SERVO_CHANNEL_MAP.get(category, 0)
+        servo_ctrl.move_to_180(channel)
+        time.sleep(0.5)
+        servo_ctrl.move_to_90(channel)
 
         return JSONResponse({
             "status": "completed",
@@ -217,9 +226,14 @@ def segregate(data: dict):
         {"status": "failed", "reason": "Missing fields"},
         status_code=400
     )
-    
 
+@app.on_event("shutdown")
+def shutdown_event():
+    servo_ctrl.stop_all()
+    conveyor.cleanup()
+    print("Hardware safely shut down.")
 
+# === Run the API ===
 if __name__ == '__main__':
     import uvicorn
     uvicorn.run(app, host='0.0.0.0', port=8000)
