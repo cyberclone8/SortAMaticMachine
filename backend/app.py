@@ -14,6 +14,9 @@ from utils.class_mapping import classify_detection, CATEGORY_COLORS, CLASS_TO_CA
 # === Initialize FastAPI ===
 app = FastAPI()
 
+# Global lock to ensure segregation runs one at a time
+segregation_lock = asyncio.Lock()
+
 # Allow your frontend to connect
 origins = ["http://localhost:5173"]  # Add your production domain here if needed
 
@@ -196,36 +199,64 @@ def move_servo(category: str, angle: float = None):
 
 # === Segregation Endpoint ===
 @app.post("/segregate")
-def segregate(data: dict):
-    """
-    Automatically control conveyor and servo based on classification result.
-    """
-    if "category" in data and "detected_class" in data:
-        category = data["category"]
-        detected_class = data["detected_class"]
+async def segregate(data: dict):
+    if "category" not in data:
+        return JSONResponse(
+            {"status": "failed", "reason": "Missing 'category' field"},
+            status_code=400
+        )
 
-        # Step 1: Move conveyor
-        dur = SERVO_MOVE_TIME.get(category, 0.5)
-        conveyor.set_speed(60.0)
-        time.sleep(dur)
-        conveyor.stop()
+    category = data["category"].lower()
+    servo_actions = {
+        "biodegradable": {"channel": 1, "angle": 0, "duration": 4},
+        "non_biodegradable": {"channel": 1, "angle": 180, "duration": 3},
+        "recyclable": {"channel": 2, "angle": 0, "duration": 2},
+        "paper": {"channel": 2, "angle": 180, "duration": 1},
+    }
 
-        # Step 2: Move corresponding servo to 90° then back
-        channel = SERVO_CHANNEL_MAP.get(category, 0)
-        servo_ctrl.move_to_180(channel)
-        time.sleep(0.5)
-        servo_ctrl.move_to_90(channel)
+    if category not in servo_actions:
+        return JSONResponse(
+            {"status": "failed", "reason": f"Unknown category '{category}'"},
+            status_code=400
+        )
 
-        return JSONResponse({
-            "status": "completed",
-            "classification": category,
-            "object": detected_class
-        })
+    action = servo_actions[category]
 
-    return JSONResponse(
-        {"status": "failed", "reason": "Missing fields"},
-        status_code=400
-    )
+    async def run_segregation():
+        async with segregation_lock:  # ensures only one segregation runs at a time
+            try:
+                # Step 1: Move conveyor at full speed (100%)
+                print(f"[INFO] Starting segregation for '{category}' - full speed conveyor")
+                conveyor.set_speed(100.0)
+                await asyncio.sleep(action["duration"])
+                conveyor.stop()
+                print(f"[INFO] Conveyor stopped after {action['duration']}s")
+
+                # Step 2: Move servo for category
+                print(f"[INFO] Moving servo {action['channel']} to {action['angle']}°")
+                servo_ctrl.move_servo(action["channel"], angle=action["angle"])
+                await asyncio.sleep(0.5)
+
+                # Step 3: Return servo to neutral position
+                print(f"[INFO] Returning servo {action['channel']} to neutral (90°)")
+                servo_ctrl.move_servo(action["channel"], angle=90)
+
+                print(f"[✅ Completed segregation for '{category}']")
+
+            except Exception as e:
+                print(f"[⚠️ Segregation error] {e}")
+
+    # Run the segregation logic in background
+    asyncio.create_task(run_segregation())
+
+    # Respond immediately
+    return JSONResponse({
+        "status": "processing",
+        "message": f"Segregation started for '{category}' at full speed",
+        "servo_channel": action["channel"],
+        "target_angle": action["angle"],
+        "conveyor_duration": action["duration"]
+    })
 
 @app.on_event("shutdown")
 def shutdown_event():
