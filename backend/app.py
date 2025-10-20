@@ -208,10 +208,26 @@ async def segregate(data: dict):
 
     category = data["category"].lower()
     servo_actions = {
-        "biodegradable": {"channel": 1, "angle": 0, "duration": 4},
-        "non_biodegradable": {"channel": 1, "angle": 180, "duration": 3},
-        "recyclable": {"channel": 2, "angle": 0, "duration": 2},
-        "paper": {"channel": 2, "angle": 180, "duration": 1},
+        "biodegradable": {
+            "channel": 0,   # first servo
+            "angle": 0,     # rotate to 0 degrees
+            "duration": 4   # run conveyor for 4 seconds
+        },
+        "non_biodegradable": {
+            "channel": 0,   # same servo as biodegradable
+            "angle": 180,   # rotate to 180 degrees
+            "duration": 3   # run conveyor for 3 seconds
+        },
+        "recyclable": {
+            "channel": 1,   # second servo
+            "angle": 0,     # rotate to 0 degrees
+            "duration": 2   # run conveyor for 2 seconds
+        },
+        "paper": {
+            "channel": 1,   # same second servo
+            "angle": 180,   # rotate to 180 degrees
+            "duration": 1   # run conveyor for 1 second
+        }
     }
 
     if category not in servo_actions:
