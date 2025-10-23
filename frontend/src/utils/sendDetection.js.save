@@ -1,8 +1,7 @@
 export async function sendDetection(detection) {
-
   try {
-  console.log(JSON.stringify(detection)); 
- const response = await fetch("http://192.168.68.126:8000/segregate", {
+console.log(JSON.stringify(detection));
+    const response = await fetch("http://192.168.68.126:8000/segregate", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

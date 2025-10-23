@@ -6,6 +6,7 @@ const SegregationLogs = ({ detection }) => {
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef(null);
 
+
   useEffect(() => {
     if (!detection) return;
 
@@ -23,20 +24,20 @@ const SegregationLogs = ({ detection }) => {
       setLogs((prev) => [...prev, scanningLog].slice(-15));
 
       try {
-        const result = await sendDetection(detection); // { status, classification, object }
+        const result = detection; // { status, classification, object }
 
         const newLogs = [
           {
             id: Date.now() + 1,
             action: "Identified Item",
-            category: result.object,
+            category: result.detected_class,
             time: new Date().toISOString(),
             type: "info",
           },
           {
             id: Date.now() + 2,
             action: "Segregating into Bin",
-            category: `${result.classification} Bin`,
+            category: `${result.category} Bin`,
             time: new Date().toISOString(),
             type: "info",
           },
@@ -100,7 +101,7 @@ const SegregationLogs = ({ detection }) => {
             className="p-3 rounded-lg border flex justify-between items-center bg-gray-50"
           >
             <div>
-              <p className={`font-medium ${getCategoryColor(log.type)}`}>
+              <p style={{textTransform: 'capitalized' }}  className={`font-medium ${getCategoryColor(log.type)}`} >
                 {log.category || "Processing..."}
               </p>
               <p className="text-sm text-gray-500">{log.action}</p>

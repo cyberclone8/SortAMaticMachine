@@ -29,7 +29,7 @@ const CameraFrame = ({ onDetection }) => {
   };
 
   useEffect(() => {
-    const ws = createSocket("ws://localhost:8000/ws/inference");
+    const ws = createSocket("ws://192.168.68.126:8000/ws/inference");
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -39,16 +39,21 @@ const CameraFrame = ({ onDetection }) => {
 
     ws.onmessage = async (event) => {
       if (isPaused.current) return; // ignore all while paused
-
+		
       try {
         const data = JSON.parse(event.data);
 
+
+	console.log(data);
         if (data.error) {
           setError(data.error);
           latestDetection.current = null;
           return;
         }
-
+        
+	if (!data.error) {
+	 setError("");
+	}
         if (data.detections && data.detections.length > 0) {
           const detection = data.detections[0];
 
@@ -69,7 +74,7 @@ const CameraFrame = ({ onDetection }) => {
               isPaused.current = false;
 
               wsRef.current?.send("resume");
-            }, 3000);
+            }, 10000);
           } else {
             // if snapshot failed, still set paused to prevent duplicates
             setPaused(true);
@@ -84,7 +89,7 @@ const CameraFrame = ({ onDetection }) => {
 
           onDetection && onDetection(detectionPayload);
           latestDetection.current = detectionPayload;
-          await sendDetection(detectionPayload);
+          await sendDetection(detection);
         }
       } catch (err) {
         console.error("❌ Failed to parse WebSocket message:", err);
@@ -117,7 +122,7 @@ const CameraFrame = ({ onDetection }) => {
         {/* Live feed always in background */}
         <img
           ref={imgRef}
-          src="http://localhost:8000/camera/mjpeg"
+          src="http://192.168.68.126:8000/camera/mjpeg"
           crossOrigin="anonymous"
           alt="Camera Feed"
           className="rounded-lg border w-full h-full object-cover"

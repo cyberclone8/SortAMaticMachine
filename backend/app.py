@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 # === Import your hardware control modules ===
 from helpers.conveyor import MotorController  # from your L298N module
 from helpers.servo import PCA9685Controller   # from your PCA9685 module
+from helpers.camera import CameraStream
 from utils.inference import detect_objects
 from utils.class_mapping import classify_detection, CATEGORY_COLORS, CLASS_TO_CATEGORY
 
@@ -18,14 +19,18 @@ app = FastAPI()
 segregation_lock = asyncio.Lock()
 
 # Allow your frontend to connect
-origins = ["http://localhost:5173"]  # Add your production domain here if needed
+origins = [
+    "http://192.168.68.126:5173",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=origins,        # Origins allowed
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],          # GET, POST, etc.
+    allow_headers=["*"],          # All headers allowed
 )
 
 # === Configuration ===
@@ -52,48 +57,29 @@ conveyor = MotorController(en_pin=25, in1_pin=24, in2_pin=23)
 CAM_INDEX = 0  # Camera device index
 
 # === MJPEG Camera Stream ===
-def mjpeg_generator():
-    cap = cv2.VideoCapture(CAM_INDEX)
-    try:
+# Shared camera instance
+camera = CameraStream(cam_index=0)
+camera.start()
+
+@app.get("/camera/mjpeg")
+def camera_mjpeg():
+    def mjpeg_generator():
         while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
+            frame = camera.get_frame()
+            if frame is None:
+                time.sleep(0.03)
+                continue
 
-            detections = detect_objects(frame)
-            for det in detections:
-                x1, y1, x2, y2 = det['bbox']
-                cls = det['class']
-                conf = det['confidence']
-                category = classify_detection(cls)
-                color = CATEGORY_COLORS.get(category, (255, 255, 255))
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(
-                    frame,
-                    f"{cls} ({category}) {conf:.2f}",
-                    (x1, max(10, y1 - 10)),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    color,
-                    2,
-                )
-
-            _, jpeg = cv2.imencode('.jpg', frame)
-            frame_bytes = jpeg.tobytes()
+            _, jpeg = cv2.imencode(".jpg", frame)
             yield (
-                b'--frame\r\n'
-                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n'
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n" + jpeg.tobytes() + b"\r\n"
             )
             time.sleep(0.03)
-    finally:
-        cap.release()
 
-
-@app.get('/camera/mjpeg')
-def camera_mjpeg():
     return StreamingResponse(
         mjpeg_generator(),
-        media_type='multipart/x-mixed-replace; boundary=frame',
+        media_type="multipart/x-mixed-replace; boundary=frame",
         headers={
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Headers": "*",
@@ -103,10 +89,9 @@ def camera_mjpeg():
 
 
 # === WebSocket Endpoint for Realtime Inference ===
-@app.websocket('/ws/inference')
+@app.websocket("/ws/inference")
 async def ws_inference(ws: WebSocket):
     await ws.accept()
-    cap = cv2.VideoCapture(CAM_INDEX)
     paused = False
 
     async def receive_commands():
@@ -129,34 +114,29 @@ async def ws_inference(ws: WebSocket):
                 await asyncio.sleep(0.1)
                 continue
 
-            ret, frame = cap.read()
-            if not ret:
-                await ws.send_json({'error': 'camera_read_failed'})
-                break
+            frame = camera.get_frame()
+            if frame is None:
+                await asyncio.sleep(0.1)
+                continue
 
             detections = detect_objects(frame)
-            if detections:
-                results = []
-                for det in detections:
-                    cls = det['class']
-                    conf = det['confidence']
-                    category = classify_detection(cls)
-                    results.append({
-                        'detected_class': cls,
-                        'confidence': conf,
-                        'category': category
-                    })
-                await ws.send_json({'detections': results})
-            else:
-                await ws.send_json({'detections': []})
+            results = []
+            for det in detections:
+                cls = det["class"]
+                conf = det["confidence"]
+                category = classify_detection(cls)
+                results.append({
+                    "detected_class": cls,
+                    "confidence": conf,
+                    "category": category,
+                })
 
+            await ws.send_json({"detections": results})
             await asyncio.sleep(0.2)
     except WebSocketDisconnect:
-        pass
+        print("[INFO] WebSocket disconnected")
     finally:
         command_task.cancel()
-        cap.release()
-
 
 # === Conveyor Control Endpoints ===
 @app.post('/conveyor/set_speed')
@@ -279,6 +259,8 @@ def shutdown_event():
     servo_ctrl.stop_all()
     conveyor.cleanup()
     print("Hardware safely shut down.")
+    print("[INFO] Stopping camera stream...")
+    camera.stop()
 
 # === Run the API ===
 if __name__ == '__main__':

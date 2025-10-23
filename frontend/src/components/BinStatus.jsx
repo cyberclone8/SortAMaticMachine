@@ -7,28 +7,6 @@ const BinStatus = () => {
   const [bin3, setBin3] = useState(0);
   const [bin4, setBin4] = useState(0);
 
-  useEffect(() => {
-    const fetchBins = async () => {
-      try {
-        const res = await fetch("http://localhost:8000/loadcells/weights");
-        if (!res.ok) throw new Error("Failed to fetch loadcell data");
-        const data = await res.json();
-
-        setBin1(data.loadcell1 || 0);
-        setBin2(data.loadcell2 || 0);
-        setBin3(data.loadcell3 || 0);
-        setBin4(data.loadcell4 || 0);
-      } catch (err) {
-        console.error("Error fetching load cell data:", err);
-      }
-    };
-
-    // Fetch every 5s
-    fetchBins();
-    const interval = setInterval(fetchBins, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
   const getColor = (percent) => {
     if (percent < 50) return "bg-green-300";
     if (percent < 80) return "bg-yellow-300";
